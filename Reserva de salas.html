@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Reserva de salas</title>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);--bg:#f6f7f9;--card:#fff;--tx:#1f2937;--mut:#6b7280;--bd:#e5e7eb;--free:#ecfdf5;--freetx:#047857;--mine:#dbeafe;--minetx:#1d4ed8;--busy:#f3f4f6;--acc:#2563eb}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#111827;--card:#1f2937;--tx:#f3f4f6;--mut:#9ca3af;--bd:#374151;--free:#064e3b;--freetx:#6ee7b7;--mine:#1e3a8a;--minetx:#bfdbfe;--busy:#374151;--acc:#60a5fa}}
+:root[data-theme="dark"]{--bg:#111827;--card:#1f2937;--tx:#f3f4f6;--mut:#9ca3af;--bd:#374151;--free:#064e3b;--freetx:#6ee7b7;--mine:#1e3a8a;--minetx:#bfdbfe;--busy:#374151;--acc:#60a5fa}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;padding:16px}
+h1{font-size:20px;margin:0 0 4px}.sub{color:var(--mut);font-size:13px;margin-bottom:12px}
+.bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:10px 12px;margin-bottom:12px}
+select{font:inherit;padding:6px 8px;border-radius:8px;border:1px solid var(--bd);background:var(--card);color:var(--tx)}
+#clr{font:inherit;font-size:13px;padding:6px 10px;border-radius:8px;border:1px solid var(--bd);background:var(--card);color:var(--tx);cursor:pointer}#clr.arm{background:#dc2626;color:#fff;border-color:#dc2626}
+.leg{display:flex;gap:10px;font-size:12px;color:var(--mut);margin-left:auto}.leg i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:4px;vertical-align:-1px}
+.wrap{overflow-x:auto;max-width:100%}
+table{border-collapse:separate;border-spacing:6px;min-width:900px;width:100%}
+th{font-size:13px;text-align:center;padding:4px}th.t{width:80px;color:var(--mut);font-weight:600}
+td.t{font-weight:600;font-size:13px;color:var(--mut);vertical-align:top;white-space:nowrap}
+td.c{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:6px;vertical-align:top}
+.r{display:flex;justify-content:space-between;gap:6px;width:100%;margin:0 0 3px;padding:4px 7px;border:0;border-radius:6px;font:inherit;font-size:12px;text-align:left;cursor:pointer}
+.r:last-child{margin-bottom:0}
+.r.free{background:var(--free);color:var(--freetx)}.r.mine{background:var(--mine);color:var(--minetx);font-weight:600}
+.r.busy{background:var(--busy);color:var(--mut);cursor:not-allowed}
+.r.free:hover{outline:2px solid var(--freetx)}
+#msg{min-height:20px;font-size:13px;color:var(--acc);margin:6px 0}
+.off{padding:10px 12px;border-radius:8px;background:var(--busy);font-size:13px;margin-bottom:12px;display:none}
+</style></head><body>
+<h1>Reserva de salas</h1>
+<div class="sub">Lunes a viernes · 15:30–20:00 · franjas de 45 min · toca una sala libre para reservarla</div>
+<div class="off" id="off">No se pudo conectar con la base de datos compartida: abre la página desde claude.ai con sesión iniciada para reservar.</div>
+<div class="bar">
+  <label>Soy: <select id="who"></select></label>
+  <button id="clr">Limpiar semana</button>
+  <div class="leg"><span><i style="background:var(--free)"></i>Libre</span><span><i style="background:var(--mine)"></i>Mía</span><span><i style="background:var(--busy)"></i>Ocupada</span></div>
+</div>
+<div id="msg"></div>
+<div class="wrap"><table id="grid"></table></div>
+<script>
+const DAYS=["Lunes","Martes","Miércoles","Jueves","Viernes"];
+const SLOTS=["15:30","16:15","17:00","17:45","18:30","19:15"];
+const ROOMS=["Sala del espejo","Despacho grande","Despacho pequeño","Sala gimnasio","Sala celeste"];
+const PROS=["Elia","Lina","Samuel","Martina","Raquel","Adrián","Thalía","Laura"];
+let data={},col=null;
+const $=id=>document.getElementById(id);
+function end(s){let[h,m]=s.split(":").map(Number);m+=45;if(m>=60){h++;m-=60}return h+":"+String(m).padStart(2,"0")}
+const who=$("who");
+who.innerHTML='<option value="">— elige tu nombre —</option>'+PROS.map(p=>`<option>${p}</option>`).join("");
+try{who.value=localStorage.getItem("pro")||""}catch(e){}
+who.onchange=()=>{try{localStorage.setItem("pro",who.value)}catch(e){}render()};
+const key=(d,s,r)=>`${d}_${s}_${r}`;
+function say(t){$("msg").textContent=t;setTimeout(()=>{if($("msg").textContent===t)$("msg").textContent=""},4000)}
+function render(){
+  let h="<tr><th class='t'></th>"+DAYS.map(d=>`<th>${d}</th>`).join("")+"</tr>";
+  SLOTS.forEach((s,si)=>{
+    h+=`<tr><td class="t">${s}<br>${end(s)}</td>`;
+    DAYS.forEach((d,di)=>{
+      h+="<td class='c'>";
+      ROOMS.forEach((r,ri)=>{
+        const b=data[key(di,si,ri)];
+        const cls=!b?"free":(b===who.value?"mine":"busy");
+        h+=`<button class="r ${cls}" data-d="${di}" data-s="${si}" data-r="${ri}"><span>${r}</span><span>${b||"libre"}</span></button>`;
+      });
+      h+="</td>";
+    });
+    h+="</tr>";
+  });
+  $("grid").innerHTML=h;
+}
+$("grid").onclick=async e=>{
+  const b=e.target.closest(".r");if(!b)return;
+  const d=+b.dataset.d,s=+b.dataset.s,r=+b.dataset.r,k=key(d,s,r),cur=data[k];
+  if(!who.value){say("Primero elige quién eres en el desplegable.");return}
+  if(!col){say("Sin conexión con la base de datos.");return}
+  try{
+    if(cur){
+      if(cur!==who.value){say("Esa sala ya está reservada por "+cur+".");return}
+      await col.doc(k).delete();say("Reserva cancelada.");return;
+    }
+    for(let i=0;i<ROOMS.length;i++){
+      if(data[key(d,s,i)]===who.value){say(`Ya tienes reservada ${ROOMS[i]} a esa hora. Cancélala primero si quieres cambiar.`);return}
+    }
+    const snap=await col.doc(k).get();
+    if(snap.exists){say("Alguien acaba de reservarla.");return}
+    await col.doc(k).set({pro:who.value,day:d,slot:s,room:r});
+    say(`Reservado: ${DAYS[d]} ${SLOTS[s]}, ${ROOMS[r]}.`);
+  }catch(err){say("No se pudo guardar: "+(err&&err.message||"error"))}
+};
+let armT=null;
+$("clr").onclick=async()=>{
+  const b=$("clr");
+  if(!b.classList.contains("arm")){b.classList.add("arm");b.textContent="¿Seguro? Pulsa otra vez";armT=setTimeout(()=>{b.classList.remove("arm");b.textContent="Limpiar semana"},4000);return}
+  clearTimeout(armT);b.classList.remove("arm");b.textContent="Limpiar semana";
+  if(!col){say("Sin conexión con la base de datos.");return}
+  try{const q=await col.get();await Promise.all(q.docs.map(x=>col.doc(x.id).delete()));say("Semana limpiada: todas las reservas eliminadas.")}
+  catch(err){say("No se pudo limpiar: "+(err&&err.message||"error"))}
+};
+render();
+(async()=>{
+  try{
+    const db=await claude.use("db");
+    if(!db){$("off").style.display="block";return}
+    col=db.collection("reservas");
+    col.onSnapshot(q=>{data={};q.docs.forEach(x=>{const v=x.data();if(v)data[x.id]=v.pro});render()},()=>{$("off").style.display="block"});
+  }catch(e){$("off").style.display="block"}
+})();
+</script></body></html>
